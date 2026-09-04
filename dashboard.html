@@ -1,98 +1,58 @@
-/* ============================================================
-   settings.js — Settings page
-   ============================================================ */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard · College Attendance Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="dashboard">
 
-(function () {
-  const settings = Storage.getSettings();
-  const targetInput = document.getElementById("targetInput");
-  const lastBackupNote = document.getElementById("lastBackupNote");
+<div class="mobile-topbar">
+  <span class="brand-mark">Dashboard</span>
+  <button class="btn btn-sm" data-theme-toggle>●</button>
+</div>
 
-  targetInput.value = settings.target ?? 75;
-  renderBackupNote();
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Attendance</span>
+      <span class="brand-sub">register</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html" data-nav="register">Daily Register</a>
+      <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+      <a href="subjects.html" data-nav="subjects">Subjects</a>
+      <a href="routine.html" data-nav="routine">Routine</a>
+      <a href="settings.html" data-nav="settings">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" data-theme-toggle>● Dark mode</button>
+    </div>
+  </aside>
 
-  function renderBackupNote() {
-    const s = Storage.getSettings();
-    lastBackupNote.textContent = s.lastBackup
-      ? `Last backup: ${new Date(s.lastBackup).toLocaleString()}`
-      : "Last backup: Never";
-  }
+  <main class="main">
+    <div class="page-head"><h1>Dashboard</h1></div>
 
-  document.getElementById("saveTargetBtn").addEventListener("click", () => {
-    const v = Number(targetInput.value);
-    if (isNaN(v) || v < 0 || v > 100) { App.toast("Enter a target between 0 and 100."); return; }
-    const s = Storage.getSettings();
-    s.target = v;
-    Storage.saveSettings(s);
-    App.toast("Target saved.");
-  });
+    <div id="dashboardBody">
+      <!-- populated by dashboard.js -->
+    </div>
+  </main>
+</div>
 
-  document.getElementById("exportJsonBtn").addEventListener("click", () => {
-    const data = Storage.exportAll();
-    Utils.downloadFile(
-      `attendance-backup-${Utils.todayISO()}.json`,
-      JSON.stringify(data, null, 2),
-      "application/json"
-    );
-    const s = Storage.getSettings();
-    s.lastBackup = new Date().toISOString();
-    Storage.saveSettings(s);
-    renderBackupNote();
-    App.toast("Backup exported.");
-  });
+<div class="mobile-tabbar">
+  <a href="index.html" data-nav="register">Register</a>
+  <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+  <a href="subjects.html" data-nav="subjects">Subjects</a>
+  <a href="routine.html" data-nav="routine">Routine</a>
+  <a href="settings.html" data-nav="settings">Settings</a>
+</div>
 
-  document.getElementById("exportCsvBtn").addEventListener("click", () => {
-    const all = Storage.getAttendanceAll();
-    const rows = [["Date", "Subject", "Code", "Start", "End", "Status"]];
-    Object.keys(all).sort().forEach((date) => {
-      Object.values(all[date]).forEach((rec) => {
-        rows.push([date, rec.subject || "", rec.code || "", rec.startTime || "", rec.endTime || "", rec.status]);
-      });
-    });
-    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    Utils.downloadFile(`attendance-${Utils.todayISO()}.csv`, csv, "text/csv");
-    App.toast("Attendance exported as CSV.");
-  });
-
-  document.getElementById("importInput").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const payload = JSON.parse(reader.result);
-        if (!confirm("Import this file? It will replace routines, attendance and settings currently stored here.")) return;
-        Storage.importAll(payload);
-        App.toast("Data imported.");
-        setTimeout(() => window.location.reload(), 600);
-      } catch (err) {
-        console.error(err);
-        App.toast("That file could not be read as a backup.");
-      }
-    };
-    reader.readAsText(file);
-  });
-
-  document.getElementById("deleteAttendanceBtn").addEventListener("click", () => {
-    if (confirm("Delete all attendance records? Routines are kept.")) {
-      Storage.deleteAttendanceData();
-      App.toast("Attendance data deleted.");
-    }
-  });
-
-  document.getElementById("deleteRoutineBtn").addEventListener("click", () => {
-    if (confirm("Delete all routines? Attendance history is kept.")) {
-      Storage.deleteRoutineData();
-      App.toast("Routines deleted.");
-    }
-  });
-
-  document.getElementById("deleteAllBtn").addEventListener("click", () => {
-    if (confirm("Delete everything — routines, attendance and settings? This cannot be undone.")) {
-      if (confirm("This is permanent. Delete all data now?")) {
-        Storage.deleteEverything();
-        App.toast("All data deleted.");
-        setTimeout(() => window.location.reload(), 600);
-      }
-    }
-  });
-})();
+<script src="js/storage.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/attendance.js"></script>
+<script src="js/app.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>
