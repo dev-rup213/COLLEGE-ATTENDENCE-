@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subjects · College Attendance Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="subjects">
+
+<div class="mobile-topbar">
+  <span class="brand-mark">Subjects</span>
+  <button class="btn btn-sm" data-theme-toggle>●</button>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Attendance</span>
+      <span class="brand-sub">register</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html" data-nav="register">Daily Register</a>
+      <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+      <a href="subjects.html" data-nav="subjects">Subjects</a>
+      <a href="routine.html" data-nav="routine">Routine</a>
+      <a href="settings.html" data-nav="settings">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" data-theme-toggle>● Dark mode</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-head"><h1>Subject-wise Attendance</h1></div>
+    <div id="subjectsBody"><!-- populated by subjects.js --></div>
+  </main>
+</div>
+
+<div class="mobile-tabbar">
+  <a href="index.html" data-nav="register">Register</a>
+  <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+  <a href="subjects.html" data-nav="subjects">Subjects</a>
+  <a href="routine.html" data-nav="routine">Routine</a>
+  <a href="settings.html" data-nav="settings">Settings</a>
+</div>
+
+<script src="js/storage.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/attendance.js"></script>
+<script src="js/app.js"></script>
+<script src="js/subjects.js"></script>
+</body>
+</html>
