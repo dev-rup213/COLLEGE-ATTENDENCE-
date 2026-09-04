@@ -1,170 +1,210 @@
 /* ============================================================
-   dashboard.js — Attendance Dashboard page
+   routine.js — Routine management page
    ============================================================ */
 
 (function () {
-  const body = document.getElementById("dashboardBody");
-  const routines = Storage.getRoutines();
+  const listEl = document.getElementById("routineList");
+  const backdrop = document.getElementById("editorBackdrop");
+  const editorTitle = document.getElementById("editorTitle");
+  const rName = document.getElementById("rName");
+  const rStart = document.getElementById("rStart");
+  const rEnd = document.getElementById("rEnd");
+  const classBody = document.getElementById("classEditBody");
+  const pdfInput = document.getElementById("pdfInput");
+  const pdfStatus = document.getElementById("pdfStatus");
+  const deleteBtn = document.getElementById("deleteRoutineBtn");
 
-  if (routines.length === 0) {
-    App.guardNoRoutine(null, body);
-    return;
-  }
+  const DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const today = Utils.todayISO();
-  const earliest = Attendance.earliestRoutineDate();
-  const settings = Storage.getSettings();
-  const target = settings.target ?? 75;
+  let editingId = null;
+  let draftClasses = [];
 
-  const overall = Attendance.overallStats(today) || { present: 0, absent: 0, holiday: 0, total: 0, scheduled: 0, percentage: null };
-
-  // remaining classes: from tomorrow through the active routine's end
-  // date if set, otherwise through the end of the current month
-  const activeRoutine = routines.find((r) => r.active) || Storage.getRoutineForDate(today);
-  let remainingEnd;
-  if (activeRoutine && activeRoutine.endDate) {
-    remainingEnd = activeRoutine.endDate;
-  } else {
-    const d = Utils.fromISO(today);
-    remainingEnd = Utils.toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0));
-  }
-  const tomorrow = Utils.addDays(today, 1);
-  const remainingCount = remainingEnd >= tomorrow
-    ? Attendance.enumerate(tomorrow, remainingEnd).length
-    : 0;
-
-  const needed = Utils.classesNeededForTarget(overall.present, overall.total, target);
-  const canMiss = Utils.classesCanMissForTarget(overall.present, overall.total, target);
-  const pct = overall.percentage;
-
-  body.innerHTML = `
-    <div class="sheet">
-      <div class="card-row">
-        <div class="stat-card"><div class="label">Overall Attendance</div><div class="value">${Utils.formatPct(pct)}</div></div>
-        <div class="stat-card"><div class="label">Total Classes</div><div class="value">${overall.total}</div></div>
-        <div class="stat-card"><div class="label">Attended</div><div class="value present">${overall.present}</div></div>
-        <div class="stat-card"><div class="label">Absent</div><div class="value absent">${overall.absent}</div></div>
-        <div class="stat-card"><div class="label">Not Held</div><div class="value holiday">${overall.holiday}</div></div>
-        <div class="stat-card"><div class="label">Remaining (scheduled)</div><div class="value">${remainingCount}</div></div>
-      </div>
-    </div>
-
-    <div class="sheet sheet-ruled">
-      <div class="flex-between">
-        <h2>Target Attendance</h2>
-        <a class="btn btn-sm" href="settings.html">Change target</a>
-      </div>
-      <p>Current attendance: <strong>${Utils.formatPct(pct)}</strong> · Target: <strong>${target}%</strong></p>
-      ${pct === null ? `<p class="muted">No attendance recorded yet.</p>` :
-        pct >= target
-          ? `<p>You are above target. You can miss up to <strong>${canMiss ?? 0}</strong> more class${canMiss === 1 ? "" : "es"} and stay at or above ${target}%.</p>`
-          : `<p>You are below target. Attend the next <strong>${needed ?? "—"}</strong> class${needed === 1 ? "" : "es"} in a row to reach ${target}%.</p>`
-      }
-    </div>
-
-    <div class="sheet sheet-ruled">
-      <div class="flex-between">
-        <h2>Day-wise</h2>
-        <div class="field-row" style="min-width: 20rem;">
-          <div class="field"><label for="dwFrom">From</label><input type="date" id="dwFrom"></div>
-          <div class="field"><label for="dwTo">To</label><input type="date" id="dwTo"></div>
-        </div>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="data-table" id="dayWiseTable">
-          <thead><tr><th>Date</th><th>Classes</th><th>Present</th><th>Absent</th><th>Not held</th><th>Attendance</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="sheet sheet-ruled">
-      <div class="flex-between">
-        <h2>Month-wise</h2>
-        <select id="monthSelect"></select>
-      </div>
-      <div id="monthStats" class="card-row" style="margin-bottom: 0.9rem;"></div>
-      <div id="monthChart"></div>
-    </div>
-  `;
-
-  // ---- Day-wise ----
-  const dwFrom = document.getElementById("dwFrom");
-  const dwTo = document.getElementById("dwTo");
-  dwFrom.value = Utils.addDays(today, -13);
-  dwTo.value = today;
-
-  function renderDayWise() {
-    const rows = Attendance.dayWise(dwFrom.value, dwTo.value).sort((a, b) => (a.date < b.date ? 1 : -1));
-    const tbody = document.querySelector("#dayWiseTable tbody");
-    if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="muted">No scheduled classes in this range.</td></tr>`;
+  function renderList() {
+    const routines = Storage.getRoutines().slice().sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+    if (routines.length === 0) {
+      listEl.innerHTML = `<div class="sheet empty-note">No routines yet. Create one to start recording attendance.</div>`;
       return;
     }
-    tbody.innerHTML = rows.map((r) => `
-      <tr class="clickable" data-date="${r.date}">
-        <td>${Utils.shortDisplayDate(r.date)}</td>
-        <td>${r.scheduled}</td>
-        <td>${r.present}</td>
-        <td>${r.absent}</td>
-        <td>${r.holiday}</td>
-        <td>${Utils.formatPct(r.percentage)}</td>
-      </tr>`).join("");
-    tbody.querySelectorAll("tr[data-date]").forEach((tr) => {
-      tr.addEventListener("click", () => {
-        window.location.href = `index.html?date=${tr.getAttribute("data-date")}`;
+    listEl.innerHTML = routines.map((r) => `
+      <div class="sheet sheet-ruled">
+        <div class="flex-between">
+          <div>
+            <h3>${Utils.escapeHtml(r.name)} ${r.active ? '<span class="pill good">Active</span>' : ""}</h3>
+            <p class="muted">${r.startDate}${r.endDate ? " → " + r.endDate : " → ongoing"} · ${r.classes.length} classes/week slots</p>
+          </div>
+          <div class="tag-list">
+            ${!r.active ? `<button class="btn btn-sm" data-action="activate" data-id="${r.id}">Set active</button>` : ""}
+            <button class="btn btn-sm" data-action="edit" data-id="${r.id}">Edit</button>
+            <button class="btn btn-sm" data-action="duplicate" data-id="${r.id}">Duplicate</button>
+            <button class="btn btn-sm btn-danger" data-action="delete" data-id="${r.id}">Delete</button>
+          </div>
+        </div>
+      </div>`).join("");
+
+    listEl.querySelectorAll("[data-action]").forEach((btn) => {
+      const id = btn.getAttribute("data-id");
+      const action = btn.getAttribute("data-action");
+      btn.addEventListener("click", () => {
+        if (action === "edit") openEditor(id);
+        else if (action === "activate") { Storage.setActiveRoutine(id); App.toast("Routine set as active."); renderList(); }
+        else if (action === "duplicate") duplicateRoutine(id);
+        else if (action === "delete") confirmDelete(id);
       });
     });
   }
-  dwFrom.addEventListener("change", renderDayWise);
-  dwTo.addEventListener("change", renderDayWise);
-  renderDayWise();
 
-  // ---- Month-wise ----
-  const monthSelect = document.getElementById("monthSelect");
-  const months = [];
-  {
-    let cursor = Utils.monthKey(earliest);
-    const last = Utils.monthKey(today);
-    while (cursor <= last) {
-      months.push(cursor);
-      const [y, m] = cursor.split("-").map(Number);
-      const next = new Date(y, m, 1); // m is 1-indexed already -> next month
-      cursor = Utils.monthKey(Utils.toISO(next));
+  function confirmDelete(id) {
+    const r = Storage.getRoutine(id);
+    if (!r) return;
+    if (confirm(`Delete routine "${r.name}"? Historical attendance already recorded for it is kept.`)) {
+      Storage.deleteRoutine(id);
+      App.toast("Routine deleted.");
+      renderList();
     }
   }
-  monthSelect.innerHTML = months.map((m) => `<option value="${m}">${Utils.monthLabel(m)}</option>`).join("");
-  monthSelect.value = Utils.monthKey(today);
 
-  function renderMonth() {
-    const key = monthSelect.value;
-    const [y, m] = key.split("-").map(Number);
-    const from = `${key}-01`;
-    const to = Utils.toISO(new Date(y, m, 0));
-    const cappedTo = to > today ? today : to;
-    const days = Attendance.dayWise(from, cappedTo).sort((a, b) => (a.date < b.date ? -1 : 1));
-    const monthAgg = Attendance.aggregate(Attendance.enumerate(from, cappedTo));
+  function duplicateRoutine(id) {
+    const r = Storage.getRoutine(id);
+    if (!r) return;
+    const copy = {
+      ...r,
+      id: Storage.genId("rt"),
+      name: r.name + " (copy)",
+      active: false,
+      classes: r.classes.map((c) => ({ ...c, id: Storage.genId("cls") })),
+    };
+    Storage.upsertRoutine(copy);
+    App.toast("Routine duplicated.");
+    renderList();
+  }
 
-    document.getElementById("monthStats").innerHTML = `
-      <div class="stat-card"><div class="label">${Utils.monthLabel(key)}</div><div class="value">${Utils.formatPct(monthAgg.percentage)}</div></div>
-      <div class="stat-card"><div class="label">Classes</div><div class="value">${monthAgg.total}</div></div>
-      <div class="stat-card"><div class="label">Attended</div><div class="value present">${monthAgg.present}</div></div>
-      <div class="stat-card"><div class="label">Absent</div><div class="value absent">${monthAgg.absent}</div></div>
-      <div class="stat-card"><div class="label">Not held</div><div class="value holiday">${monthAgg.holiday}</div></div>
-    `;
+  // ---------- Editor ----------
 
-    const chartEl = document.getElementById("monthChart");
-    if (days.length === 0) {
-      chartEl.innerHTML = `<p class="muted">No scheduled classes recorded yet this month.</p>`;
-    } else {
-      Chart.renderBarChart(chartEl, {
-        labels: days.map((d) => Utils.shortDisplayDate(d.date).split(" ")[0]),
-        values: days.map((d) => d.percentage),
-        targetValue: target,
-        max: 100,
+  function openEditor(id) {
+    editingId = id;
+    const routine = id ? Storage.getRoutine(id) : null;
+    editorTitle.textContent = routine ? "Edit Routine" : "New Routine";
+    rName.value = routine ? routine.name : "";
+    rStart.value = routine ? routine.startDate : Utils.todayISO();
+    rEnd.value = routine && routine.endDate ? routine.endDate : "";
+    draftClasses = routine ? routine.classes.map((c) => ({ ...c })) : [];
+    deleteBtn.classList.toggle("hidden", !routine);
+    pdfStatus.textContent = "";
+    pdfInput.value = "";
+    renderClassTable();
+    backdrop.classList.remove("hidden");
+  }
+
+  function closeEditor() {
+    backdrop.classList.add("hidden");
+  }
+
+  function renderClassTable() {
+    if (draftClasses.length === 0) {
+      classBody.innerHTML = `<tr><td colspan="8" class="muted">No classes yet — add one, or upload a routine PDF above.</td></tr>`;
+      return;
+    }
+    classBody.innerHTML = draftClasses.map((c, i) => `
+      <tr data-idx="${i}">
+        <td>
+          <select data-field="day">
+            ${DAY_OPTIONS.map((d) => `<option value="${d}" ${c.day === d ? "selected" : ""}>${d}</option>`).join("")}
+          </select>
+        </td>
+        <td><input type="time" data-field="startTime" value="${c.startTime || ""}"></td>
+        <td><input type="time" data-field="endTime" value="${c.endTime || ""}"></td>
+        <td><input type="text" data-field="subject" value="${Utils.escapeHtml(c.subject || "")}" placeholder="Subject"></td>
+        <td><input type="text" data-field="code" value="${Utils.escapeHtml(c.code || "")}" placeholder="Code" style="width:5.5rem;"></td>
+        <td><input type="text" data-field="room" value="${Utils.escapeHtml(c.room || "")}" placeholder="Room" style="width:4.5rem;"></td>
+        <td><input type="text" data-field="faculty" value="${Utils.escapeHtml(c.faculty || "")}" placeholder="Faculty"></td>
+        <td>
+          <button class="btn btn-sm btn-ghost" data-move="-1" title="Move up">↑</button>
+          <button class="btn btn-sm btn-ghost" data-move="1" title="Move down">↓</button>
+          <button class="btn btn-sm btn-danger" data-remove title="Delete">✕</button>
+        </td>
+      </tr>`).join("");
+
+    classBody.querySelectorAll("tr[data-idx]").forEach((tr) => {
+      const idx = Number(tr.getAttribute("data-idx"));
+      tr.querySelectorAll("[data-field]").forEach((input) => {
+        input.addEventListener("change", () => {
+          draftClasses[idx][input.getAttribute("data-field")] = input.value;
+        });
       });
-    }
+      const removeBtn = tr.querySelector("[data-remove]");
+      removeBtn.addEventListener("click", () => {
+        draftClasses.splice(idx, 1);
+        renderClassTable();
+      });
+      tr.querySelectorAll("[data-move]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const dir = Number(btn.getAttribute("data-move"));
+          const swapWith = idx + dir;
+          if (swapWith < 0 || swapWith >= draftClasses.length) return;
+          [draftClasses[idx], draftClasses[swapWith]] = [draftClasses[swapWith], draftClasses[idx]];
+          renderClassTable();
+        });
+      });
+    });
   }
-  monthSelect.addEventListener("change", renderMonth);
-  renderMonth();
+
+  document.getElementById("addClassBtn").addEventListener("click", () => {
+    draftClasses.push({
+      id: Storage.genId("cls"), day: "Mon", startTime: "", endTime: "",
+      subject: "", code: "", room: "", faculty: "",
+    });
+    renderClassTable();
+  });
+
+  document.getElementById("newRoutineBtn").addEventListener("click", () => openEditor(null));
+  document.getElementById("closeEditor").addEventListener("click", closeEditor);
+  document.getElementById("cancelEditor").addEventListener("click", closeEditor);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeEditor(); });
+
+  deleteBtn.addEventListener("click", () => {
+    if (editingId) { confirmDelete(editingId); closeEditor(); }
+  });
+
+  document.getElementById("saveRoutineBtn").addEventListener("click", () => {
+    const name = rName.value.trim();
+    const start = rStart.value;
+    if (!name) { App.toast("Give the routine a name."); return; }
+    if (!start) { App.toast("Pick a start date."); return; }
+    const routine = {
+      id: editingId || Storage.genId("rt"),
+      name,
+      startDate: start,
+      endDate: rEnd.value || null,
+      active: editingId ? (Storage.getRoutine(editingId)?.active ?? false) : Storage.getRoutines().length === 0,
+      classes: draftClasses,
+    };
+    Storage.upsertRoutine(routine);
+    App.toast("Routine saved.");
+    closeEditor();
+    renderList();
+  });
+
+  // ---------- PDF import ----------
+
+  document.getElementById("extractBtn").addEventListener("click", async () => {
+    const file = pdfInput.files[0];
+    if (!file) { pdfStatus.textContent = "Choose a PDF file first."; return; }
+    pdfStatus.textContent = "Reading PDF…";
+    try {
+      const lines = await PdfParse.extractText(file);
+      const rows = PdfParse.parseRows(lines);
+      if (rows.length === 0) {
+        pdfStatus.textContent = "Couldn't identify any class rows automatically — add classes manually below, or check the PDF has a text layer (not a scanned image).";
+        return;
+      }
+      draftClasses = draftClasses.concat(rows);
+      renderClassTable();
+      pdfStatus.textContent = `Extracted ${rows.length} possible class${rows.length === 1 ? "" : "es"}. Review every row below — nothing is saved yet.`;
+    } catch (err) {
+      console.error(err);
+      pdfStatus.textContent = "Couldn't read that PDF automatically. Use manual entry below instead.";
+    }
+  });
+
+  renderList();
 })();

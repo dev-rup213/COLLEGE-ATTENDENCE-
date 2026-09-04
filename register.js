@@ -1,139 +1,119 @@
 /* ============================================================
-   attendance.js — scheduling + aggregation engine
+   pdf-parse.js — best-effort PDF routine extraction
 
-   A class is "scheduled" on a date if the routine active for that
-   date has an entry whose `day` matches the date's weekday.
-
-   Effective status for a scheduled class on a date:
-     - an explicit saved record (present / absent / holiday), or
-     - "absent" by default, for any date up to and including today
-       (an unticked class is an absence — see spec §5/§6), or
-     - not counted at all, for dates after today (nothing has
-       happened yet, so it is excluded from every calculation).
+   Uses pdf.js (loaded from cdnjs in routine.html) to pull raw text
+   out of an uploaded PDF, then applies simple heuristics to guess
+   day / time / subject / code / room columns. This is intentionally
+   a *best effort*: results always land in an editable table (see
+   routine.js) and nothing is saved until the user confirms it.
    ============================================================ */
 
-const Attendance = (() => {
-  // All routines that could possibly apply within [fromISO, toISO],
-  // keyed for quick lookup by date -> routine.
-  function routineForDateCached(cache, iso) {
-    if (!(iso in cache)) cache[iso] = Storage.getRoutineForDate(iso);
-    return cache[iso];
+const PdfParse = (() => {
+  const DAY_TOKENS = {
+    mon: "Mon", monday: "Mon",
+    tue: "Tue", tues: "Tue", tuesday: "Tue",
+    wed: "Wed", wednesday: "Wed",
+    thu: "Thu", thur: "Thu", thurs: "Thu", thursday: "Thu",
+    fri: "Fri", friday: "Fri",
+    sat: "Sat", saturday: "Sat",
+    sun: "Sun", sunday: "Sun",
+  };
+
+  const TIME_RANGE_RE = /(\d{1,2}[:.]\d{2}\s?(?:AM|PM|am|pm)?)\s*(?:-|–|to)\s*(\d{1,2}[:.]\d{2}\s?(?:AM|PM|am|pm)?)/;
+
+  async function extractText(file) {
+    if (!window.pdfjsLib) throw new Error("PDF engine did not load. Check your connection and try again, or use manual entry.");
+    const buf = await file.arrayBuffer();
+    const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const lines = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      // group text items by approximate vertical position (row)
+      const rows = {};
+      content.items.forEach((item) => {
+        const y = Math.round(item.transform[5] / 3) * 3; // bucket rows
+        if (!rows[y]) rows[y] = [];
+        rows[y].push(item.str);
+      });
+      const ys = Object.keys(rows).map(Number).sort((a, b) => b - a);
+      ys.forEach((y) => {
+        const line = rows[y].join(" ").replace(/\s+/g, " ").trim();
+        if (line) lines.push(line);
+      });
+    }
+    return lines;
   }
 
-  // Enumerate every scheduled class instance between fromISO and
-  // toISO inclusive. Returns [{ date, classId, subject, code, room,
-  // startTime, endTime, day, routineId, status }]
-  function enumerate(fromISO, toISO, filter) {
-    const attAll = Storage.getAttendanceAll();
-    const routineCache = {};
-    const today = Utils.todayISO();
-    const out = [];
+  function normalizeTime(t) {
+    if (!t) return "";
+    let s = t.trim().replace(".", ":");
+    const ampm = /pm/i.test(s) ? "PM" : /am/i.test(s) ? "AM" : null;
+    s = s.replace(/\s?(am|pm)/i, "");
+    let [h, m] = s.split(":").map((x) => parseInt(x, 10));
+    if (isNaN(h)) return "";
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    m = isNaN(m) ? 0 : m;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
 
-    let cursor = fromISO;
-    let guard = 0;
-    while (cursor <= toISO && guard < 5000) {
-      guard++;
-      const routine = routineForDateCached(routineCache, cursor);
-      if (routine) {
-        const dow = Utils.dayShort(cursor);
-        const dayClasses = routine.classes.filter((c) => c.day === dow);
-        for (const cls of dayClasses) {
-          const record = attAll[cursor] && attAll[cursor][cls.id];
-          let status = record ? record.status : (cursor <= today ? "absent" : null);
-          if (status === null) { cursor = Utils.addDays(cursor, 1); continue; }
-          const item = {
-            date: cursor,
-            classId: cls.id,
-            subject: cls.subject,
-            code: cls.code || "",
-            room: cls.room || "",
-            faculty: cls.faculty || "",
-            startTime: cls.startTime,
-            endTime: cls.endTime,
-            day: dow,
-            routineId: routine.id,
-            status,
-            explicit: !!record,
-          };
-          if (!filter || filter(item)) out.push(item);
-        }
+  function guessDay(line) {
+    const words = line.toLowerCase().split(/[^a-z]+/);
+    for (const w of words) {
+      if (DAY_TOKENS[w]) return DAY_TOKENS[w];
+    }
+    return null;
+  }
+
+  // Parse extracted lines into best-guess class rows. Every row
+  // needs a recognizable time range to be considered a class slot;
+  // everything else is a guess the user is expected to correct.
+  function parseRows(lines) {
+    const rows = [];
+    let lastDay = null;
+
+    lines.forEach((line) => {
+      const dayHere = guessDay(line);
+      if (dayHere) lastDay = dayHere;
+
+      const timeMatch = line.match(TIME_RANGE_RE);
+      if (!timeMatch) return;
+
+      const startTime = normalizeTime(timeMatch[1]);
+      const endTime = normalizeTime(timeMatch[2]);
+
+      // strip the day word and time range out, split the remainder
+      // on 2+ spaces / tabs / pipes into candidate columns
+      let remainder = line
+        .replace(timeMatch[0], " ")
+        .replace(/\b(mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|sun|sunday)\b/gi, " ")
+        .trim();
+      const cols = remainder.split(/\s{2,}|\t|\|/).map((c) => c.trim()).filter(Boolean);
+
+      let subject = cols[0] || remainder || "Untitled subject";
+      let code = "";
+      let room = "";
+
+      if (cols.length >= 2) {
+        // look for a short all-caps/alnum token that looks like a code
+        const codeIdx = cols.findIndex((c, i) => i > 0 && /^[A-Z0-9]{2,8}$/.test(c));
+        if (codeIdx > -1) { code = cols[codeIdx]; }
+        const roomIdx = cols.findIndex((c, i) => i > 0 && /(room|hall|lab|\b\d{2,4}\b)/i.test(c));
+        if (roomIdx > -1 && roomIdx !== codeIdx) { room = cols[roomIdx]; }
       }
-      cursor = Utils.addDays(cursor, 1);
-    }
-    return out;
+
+      rows.push({
+        id: Storage.genId("cls"),
+        day: dayHere || lastDay || "Mon",
+        startTime, endTime,
+        subject: subject.replace(/[-–|]+$/, "").trim() || "Untitled subject",
+        code, room, faculty: "",
+      });
+    });
+
+    return rows;
   }
 
-  function aggregate(items) {
-    const c = { present: 0, absent: 0, holiday: 0 };
-    for (const it of items) {
-      if (it.status === "present") c.present++;
-      else if (it.status === "absent") c.absent++;
-      else if (it.status === "holiday") c.holiday++;
-    }
-    c.total = c.present + c.absent; // holidays excluded from total
-    c.scheduled = c.present + c.absent + c.holiday;
-    c.percentage = Utils.percentage(c);
-    return c;
-  }
-
-  function overallStats(uptoISO) {
-    const routines = Storage.getRoutines();
-    if (routines.length === 0) return null;
-    const earliest = routines.reduce((min, r) => (r.startDate < min ? r.startDate : min), routines[0].startDate);
-    const items = enumerate(earliest, uptoISO || Utils.todayISO());
-    return aggregate(items);
-  }
-
-  function dayWise(fromISO, toISO) {
-    const items = enumerate(fromISO, toISO);
-    const byDate = {};
-    for (const it of items) {
-      if (!byDate[it.date]) byDate[it.date] = [];
-      byDate[it.date].push(it);
-    }
-    return Object.keys(byDate).sort().map((date) => ({
-      date,
-      ...aggregate(byDate[date]),
-    }));
-  }
-
-  function monthWise(fromISO, toISO) {
-    const items = enumerate(fromISO, toISO);
-    const byMonth = {};
-    for (const it of items) {
-      const key = Utils.monthKey(it.date);
-      if (!byMonth[key]) byMonth[key] = [];
-      byMonth[key].push(it);
-    }
-    return Object.keys(byMonth).sort().map((key) => ({
-      key,
-      ...aggregate(byMonth[key]),
-    }));
-  }
-
-  function subjectWise(fromISO, toISO) {
-    const items = enumerate(fromISO, toISO);
-    const bySubject = {};
-    for (const it of items) {
-      const key = it.subject;
-      if (!bySubject[key]) bySubject[key] = { subject: key, code: it.code, items: [] };
-      bySubject[key].items.push(it);
-    }
-    return Object.values(bySubject)
-      .map((s) => ({ subject: s.subject, code: s.code, ...aggregate(s.items) }))
-      .sort((a, b) => a.subject.localeCompare(b.subject));
-  }
-
-  function subjectHistory(subject, fromISO, toISO) {
-    return enumerate(fromISO, toISO, (it) => it.subject === subject)
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }
-
-  function earliestRoutineDate() {
-    const routines = Storage.getRoutines();
-    if (routines.length === 0) return null;
-    return routines.reduce((min, r) => (r.startDate < min ? r.startDate : min), routines[0].startDate);
-  }
-
-  return { enumerate, aggregate, overallStats, dayWise, monthWise, subjectWise, subjectHistory, earliestRoutineDate };
+  return { extractText, parseRows };
 })();

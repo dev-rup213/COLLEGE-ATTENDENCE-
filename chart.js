@@ -1,574 +1,139 @@
 /* ============================================================
-   College Attendance Tracker — Stylesheet
-   Design concept: a bound attendance register / ledger book.
-   Paper surface, ink typography, red-margin rule as a structural
-   motif (echoing the red vertical line on ruled register paper),
-   red pen for Absent, blue-black ink for Present.
+   attendance.js — scheduling + aggregation engine
+
+   A class is "scheduled" on a date if the routine active for that
+   date has an entry whose `day` matches the date's weekday.
+
+   Effective status for a scheduled class on a date:
+     - an explicit saved record (present / absent / holiday), or
+     - "absent" by default, for any date up to and including today
+       (an unticked class is an absence — see spec §5/§6), or
+     - not counted at all, for dates after today (nothing has
+       happened yet, so it is excluded from every calculation).
    ============================================================ */
 
-:root {
-  /* Color */
-  --paper: #eeece2;
-  --paper-deep: #e4e1d3;
-  --sheet: #fffdf8;
-  --ink: #22282f;
-  --ink-soft: #5b6472;
-  --ink-faint: #8b93a0;
-  --rule: #d8d3c2;
-  --rule-strong: #c3bda8;
-  --margin-red: #b3463c;
-  --accent: #2c5282;
-  --accent-soft: #dbe6f2;
-  --present: #2f7a4f;
-  --present-bg: #e2f0e6;
-  --absent: #b3463c;
-  --absent-bg: #f6e4e1;
-  --holiday: #a3711f;
-  --holiday-bg: #f3e8d3;
-  --shadow: 0 1px 2px rgba(34, 40, 47, 0.06), 0 4px 14px rgba(34, 40, 47, 0.07);
-
-  /* Type */
-  --font-head: "Source Serif 4", "Iowan Old Style", Georgia, serif;
-  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --font-num: "IBM Plex Sans", system-ui, sans-serif;
-
-  /* Layout */
-  --sidebar-w: 15rem;
-  --radius: 3px;
-  --radius-lg: 6px;
-}
-
-[data-theme="dark"] {
-  --paper: #1b1d1f;
-  --paper-deep: #161719;
-  --sheet: #232628;
-  --ink: #e9e6dd;
-  --ink-soft: #b7b2a4;
-  --ink-faint: #837c6a;
-  --rule: #3a3d38;
-  --rule-strong: #4b4e46;
-  --margin-red: #c9645a;
-  --accent: #7ea3d6;
-  --accent-soft: #223347;
-  --present: #6cb98a;
-  --present-bg: #1f3327;
-  --absent: #d3766c;
-  --absent-bg: #3a2320;
-  --holiday: #cf9d4d;
-  --holiday-bg: #392e18;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.35);
-}
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-}
-
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-h1, h2, h3 {
-  font-family: var(--font-head);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0 0 0.3em;
-  color: var(--ink);
-}
-
-h1 { font-size: 1.5rem; }
-h2 { font-size: 1.15rem; }
-h3 { font-size: 1rem; }
-
-p { margin: 0 0 0.75em; color: var(--ink-soft); }
-
-a { color: var(--accent); }
-
-button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
-
-/* ---------- App shell ---------- */
-
-.app-shell {
-  display: flex;
-  min-height: 100vh;
-}
-
-.sidebar {
-  width: var(--sidebar-w);
-  flex-shrink: 0;
-  background: var(--paper-deep);
-  border-right: 1px solid var(--rule-strong);
-  padding: 1.4rem 1rem;
-  display: flex;
-  flex-direction: column;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-}
-
-.brand {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  padding: 0 0.4rem 1.2rem;
-  border-bottom: 2px solid var(--margin-red);
-  margin-bottom: 1rem;
-}
-
-.brand-mark {
-  font-family: var(--font-head);
-  font-size: 1.3rem;
-  font-weight: 700;
-}
-
-.brand-sub {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  text-transform: lowercase;
-}
-
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.nav a {
-  text-decoration: none;
-  color: var(--ink-soft);
-  padding: 0.55rem 0.7rem;
-  border-radius: var(--radius);
-  font-size: 0.92rem;
-  border-left: 3px solid transparent;
-}
-
-.nav a:hover { background: var(--sheet); color: var(--ink); }
-
-.nav a.active {
-  background: var(--sheet);
-  color: var(--ink);
-  border-left-color: var(--margin-red);
-  font-weight: 600;
-}
-
-.sidebar-foot {
-  margin-top: auto;
-  font-size: 0.75rem;
-  color: var(--ink-faint);
-  padding: 0 0.4rem;
-}
-
-.theme-toggle {
-  margin-top: 0.6rem;
-  background: var(--sheet);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius);
-  padding: 0.4rem 0.6rem;
-  cursor: pointer;
-  font-size: 0.78rem;
-  width: 100%;
-}
-
-.main {
-  flex: 1;
-  min-width: 0;
-  padding: 1.6rem 2rem 5rem;
-  max-width: 68rem;
-}
-
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.2rem;
-  flex-wrap: wrap;
-}
-
-/* ---------- Mobile top/bottom bars ---------- */
-
-.mobile-topbar {
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.8rem 1rem;
-  background: var(--paper-deep);
-  border-bottom: 2px solid var(--margin-red);
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-.mobile-tabbar {
-  display: none;
-}
-
-/* ---------- Sheet / card ---------- */
-
-.sheet {
-  background: var(--sheet);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  padding: 1.1rem 1.2rem;
-  margin-bottom: 1rem;
-  position: relative;
-}
-
-.sheet-ruled {
-  border-left: 3px solid var(--margin-red);
-  padding-left: 1.4rem;
-}
-
-.card-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-  gap: 0.7rem;
-}
-
-.stat-card {
-  background: var(--sheet);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-lg);
-  padding: 0.85rem 1rem;
-  box-shadow: var(--shadow);
-}
-
-.stat-card .label {
-  font-size: 0.72rem;
-  color: var(--ink-faint);
-  margin-bottom: 0.25rem;
-}
-
-.stat-card .value {
-  font-family: var(--font-head);
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.stat-card .value.present { color: var(--present); }
-.stat-card .value.absent { color: var(--absent); }
-.stat-card .value.holiday { color: var(--holiday); }
-
-/* ---------- Buttons ---------- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--rule-strong);
-  background: var(--sheet);
-  color: var(--ink);
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.87rem;
-  line-height: 1;
-}
-
-.btn:hover { border-color: var(--accent); }
-
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.btn-primary:hover { opacity: 0.92; }
-
-.btn-danger {
-  background: var(--absent-bg);
-  border-color: var(--absent);
-  color: var(--absent);
-}
-
-.btn-ghost {
-  border-color: transparent;
-  background: transparent;
-}
-
-.btn-sm { padding: 0.32rem 0.6rem; font-size: 0.78rem; }
-
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* ---------- Forms ---------- */
-
-label {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--ink-soft);
-  margin-bottom: 0.25rem;
-}
-
-input[type="text"], input[type="date"], input[type="time"], input[type="number"],
-select, textarea {
-  width: 100%;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius);
-  background: var(--sheet);
-  color: var(--ink);
-}
-
-input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.field { margin-bottom: 0.8rem; }
-
-.field-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 0.7rem;
-}
-
-/* ---------- Daily register ---------- */
-
-.date-strip {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
-
-.date-strip .date-heading {
-  font-family: var(--font-head);
-  font-size: 1.05rem;
-  margin-right: auto;
-}
-
-.class-row {
-  display: grid;
-  grid-template-columns: 5.4rem 1fr auto;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px dashed var(--rule);
-}
-
-.class-row:last-child { border-bottom: none; }
-
-.class-time {
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
-
-.class-subject { font-weight: 600; }
-.class-meta { font-size: 0.76rem; color: var(--ink-faint); }
-
-.status-group {
-  display: inline-flex;
-  border: 1px solid var(--rule-strong);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.status-btn {
-  border: none;
-  background: var(--sheet);
-  padding: 0.4rem 0.7rem;
-  font-size: 0.78rem;
-  cursor: pointer;
-  color: var(--ink-soft);
-  border-right: 1px solid var(--rule-strong);
-}
-
-.status-btn:last-child { border-right: none; }
-
-.status-btn[data-status="present"].active { background: var(--present-bg); color: var(--present); font-weight: 600; }
-.status-btn[data-status="absent"].active { background: var(--absent-bg); color: var(--absent); font-weight: 600; }
-.status-btn[data-status="holiday"].active { background: var(--holiday-bg); color: var(--holiday); font-weight: 600; }
-
-.empty-note {
-  padding: 1.5rem 0.5rem;
-  text-align: center;
-  color: var(--ink-faint);
-  font-size: 0.88rem;
-}
-
-/* ---------- Tables ---------- */
-
-table.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.86rem;
-}
-
-.data-table th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--ink-soft);
-  border-bottom: 2px solid var(--rule-strong);
-  padding: 0.5rem 0.6rem;
-  font-size: 0.75rem;
-}
-
-.data-table td {
-  padding: 0.55rem 0.6rem;
-  border-bottom: 1px solid var(--rule);
-  vertical-align: middle;
-}
-
-.data-table tr:last-child td { border-bottom: none; }
-
-.data-table tr.clickable { cursor: pointer; }
-.data-table tr.clickable:hover { background: var(--accent-soft); }
-
-.pill {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.pill.good { background: var(--present-bg); color: var(--present); }
-.pill.mid { background: var(--holiday-bg); color: var(--holiday); }
-.pill.low { background: var(--absent-bg); color: var(--absent); }
-
-/* ---------- Toast ---------- */
-
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 1.4rem;
-  transform: translateX(-50%) translateY(6px);
-  background: var(--ink);
-  color: var(--sheet);
-  padding: 0.6rem 1.1rem;
-  border-radius: 999px;
-  font-size: 0.83rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-  z-index: 50;
-  box-shadow: var(--shadow);
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* ---------- Misc ---------- */
-
-.section-divider {
-  border: none;
-  border-top: 1px solid var(--rule);
-  margin: 1.4rem 0;
-}
-
-.muted { color: var(--ink-faint); font-size: 0.8rem; }
-
-.flex-between {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.tag-list { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-
-.chip {
-  border: 1px solid var(--rule-strong);
-  background: var(--sheet);
-  border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-
-.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(20, 22, 20, 0.45);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 4vh 1rem;
-  overflow-y: auto;
-  z-index: 40;
-}
-
-.modal {
-  background: var(--sheet);
-  border-radius: var(--radius-lg);
-  padding: 1.2rem;
-  width: min(34rem, 100%);
-  box-shadow: var(--shadow);
-}
-
-.hidden { display: none !important; }
-
-.svg-chart text { fill: var(--ink-soft); font-family: var(--font-body); }
-.svg-chart .bar { fill: var(--accent); }
-.svg-chart .gridline { stroke: var(--rule); stroke-width: 1; }
-.svg-chart .target-line { stroke: var(--margin-red); stroke-width: 1.4; stroke-dasharray: 4 3; }
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 860px) {
-  .sidebar { display: none; }
-
-  .mobile-topbar {
-    display: flex;
+const Attendance = (() => {
+  // All routines that could possibly apply within [fromISO, toISO],
+  // keyed for quick lookup by date -> routine.
+  function routineForDateCached(cache, iso) {
+    if (!(iso in cache)) cache[iso] = Storage.getRoutineForDate(iso);
+    return cache[iso];
   }
 
-  .app-shell { flex-direction: column; }
+  // Enumerate every scheduled class instance between fromISO and
+  // toISO inclusive. Returns [{ date, classId, subject, code, room,
+  // startTime, endTime, day, routineId, status }]
+  function enumerate(fromISO, toISO, filter) {
+    const attAll = Storage.getAttendanceAll();
+    const routineCache = {};
+    const today = Utils.todayISO();
+    const out = [];
 
-  .main {
-    padding: 1rem 1rem 5.5rem;
-    max-width: 100%;
+    let cursor = fromISO;
+    let guard = 0;
+    while (cursor <= toISO && guard < 5000) {
+      guard++;
+      const routine = routineForDateCached(routineCache, cursor);
+      if (routine) {
+        const dow = Utils.dayShort(cursor);
+        const dayClasses = routine.classes.filter((c) => c.day === dow);
+        for (const cls of dayClasses) {
+          const record = attAll[cursor] && attAll[cursor][cls.id];
+          let status = record ? record.status : (cursor <= today ? "absent" : null);
+          if (status === null) { cursor = Utils.addDays(cursor, 1); continue; }
+          const item = {
+            date: cursor,
+            classId: cls.id,
+            subject: cls.subject,
+            code: cls.code || "",
+            room: cls.room || "",
+            faculty: cls.faculty || "",
+            startTime: cls.startTime,
+            endTime: cls.endTime,
+            day: dow,
+            routineId: routine.id,
+            status,
+            explicit: !!record,
+          };
+          if (!filter || filter(item)) out.push(item);
+        }
+      }
+      cursor = Utils.addDays(cursor, 1);
+    }
+    return out;
   }
 
-  .mobile-tabbar {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--paper-deep);
-    border-top: 2px solid var(--margin-red);
-    z-index: 20;
-    padding: 0.35rem 0.2rem calc(0.35rem + env(safe-area-inset-bottom));
+  function aggregate(items) {
+    const c = { present: 0, absent: 0, holiday: 0 };
+    for (const it of items) {
+      if (it.status === "present") c.present++;
+      else if (it.status === "absent") c.absent++;
+      else if (it.status === "holiday") c.holiday++;
+    }
+    c.total = c.present + c.absent; // holidays excluded from total
+    c.scheduled = c.present + c.absent + c.holiday;
+    c.percentage = Utils.percentage(c);
+    return c;
   }
 
-  .mobile-tabbar a {
-    flex: 1;
-    text-align: center;
-    text-decoration: none;
-    color: var(--ink-faint);
-    font-size: 0.66rem;
-    padding: 0.35rem 0.1rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.15rem;
+  function overallStats(uptoISO) {
+    const routines = Storage.getRoutines();
+    if (routines.length === 0) return null;
+    const earliest = routines.reduce((min, r) => (r.startDate < min ? r.startDate : min), routines[0].startDate);
+    const items = enumerate(earliest, uptoISO || Utils.todayISO());
+    return aggregate(items);
   }
 
-  .mobile-tabbar a.active { color: var(--margin-red); font-weight: 600; }
-
-  .class-row {
-    grid-template-columns: 1fr;
-    gap: 0.4rem;
+  function dayWise(fromISO, toISO) {
+    const items = enumerate(fromISO, toISO);
+    const byDate = {};
+    for (const it of items) {
+      if (!byDate[it.date]) byDate[it.date] = [];
+      byDate[it.date].push(it);
+    }
+    return Object.keys(byDate).sort().map((date) => ({
+      date,
+      ...aggregate(byDate[date]),
+    }));
   }
 
-  .status-group { width: 100%; }
-  .status-btn { flex: 1; text-align: center; }
+  function monthWise(fromISO, toISO) {
+    const items = enumerate(fromISO, toISO);
+    const byMonth = {};
+    for (const it of items) {
+      const key = Utils.monthKey(it.date);
+      if (!byMonth[key]) byMonth[key] = [];
+      byMonth[key].push(it);
+    }
+    return Object.keys(byMonth).sort().map((key) => ({
+      key,
+      ...aggregate(byMonth[key]),
+    }));
+  }
 
-  .data-table { display: block; overflow-x: auto; white-space: nowrap; }
-}
+  function subjectWise(fromISO, toISO) {
+    const items = enumerate(fromISO, toISO);
+    const bySubject = {};
+    for (const it of items) {
+      const key = it.subject;
+      if (!bySubject[key]) bySubject[key] = { subject: key, code: it.code, items: [] };
+      bySubject[key].items.push(it);
+    }
+    return Object.values(bySubject)
+      .map((s) => ({ subject: s.subject, code: s.code, ...aggregate(s.items) }))
+      .sort((a, b) => a.subject.localeCompare(b.subject));
+  }
+
+  function subjectHistory(subject, fromISO, toISO) {
+    return enumerate(fromISO, toISO, (it) => it.subject === subject)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+
+  function earliestRoutineDate() {
+    const routines = Storage.getRoutines();
+    if (routines.length === 0) return null;
+    return routines.reduce((min, r) => (r.startDate < min ? r.startDate : min), routines[0].startDate);
+  }
+
+  return { enumerate, aggregate, overallStats, dayWise, monthWise, subjectWise, subjectHistory, earliestRoutineDate };
+})();
