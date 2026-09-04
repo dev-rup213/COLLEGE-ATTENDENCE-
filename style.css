@@ -8,8 +8,8 @@
 
 :root {
   /* Color */
-  --paper: #eeece2;
-  --paper-deep: #e4e1d3;
+  --paper: #7fe5f8;/*#eeece2;*/
+  --paper-deep: #062571/*#e4e1d3;*/
   --sheet: #fffdf8;
   --ink: #22282f;
   --ink-soft: #5b6472;
