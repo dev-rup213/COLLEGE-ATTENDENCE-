@@ -1,204 +1,70 @@
-/* ============================================================
-   storage.js — LocalStorage data layer
-   Keys:
-     cat_routines   -> array of Routine
-     cat_attendance -> { "YYYY-MM-DD": { classId: AttendanceEntry } }
-     cat_settings   -> Settings
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Register · College Attendance Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="register">
 
-   Routine   = { id, name, startDate, endDate, active, classes: [Class] }
-   Class     = { id, day, startTime, endTime, subject, code, room, faculty }
-   Attendance entry = { status: 'present'|'absent'|'holiday', subject,
-                         code, startTime, endTime, routineId, day, savedAt }
-   Settings  = { target, theme, lastBackup }
-   ============================================================ */
+<div class="mobile-topbar">
+  <span class="brand-mark">Register</span>
+  <button class="btn btn-sm" data-theme-toggle>●</button>
+</div>
 
-const Storage = (() => {
-  const KEYS = {
-    routines: "cat_routines",
-    attendance: "cat_attendance",
-    settings: "cat_settings",
-  };
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Attendance</span>
+      <span class="brand-sub">register</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html" data-nav="register">Daily Register</a>
+      <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+      <a href="subjects.html" data-nav="subjects">Subjects</a>
+      <a href="routine.html" data-nav="routine">Routine</a>
+      <a href="settings.html" data-nav="settings">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" data-theme-toggle>● Dark mode</button>
+    </div>
+  </aside>
 
-  function read(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw === null) return fallback;
-      return JSON.parse(raw);
-    } catch (e) {
-      console.error("Storage read failed for", key, e);
-      return fallback;
-    }
-  }
+  <main class="main">
+    <div class="page-head">
+      <h1>Daily Register</h1>
+    </div>
 
-  function write(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch (e) {
-      console.error("Storage write failed for", key, e);
-      return false;
-    }
-  }
+    <div class="sheet">
+      <div class="date-strip">
+        <button class="btn btn-sm" id="prevDay" aria-label="Previous day">‹ Prev</button>
+        <input type="date" id="dateInput">
+        <button class="btn btn-sm" id="nextDay" aria-label="Next day">Next ›</button>
+        <button class="btn btn-sm" id="todayBtn">Today</button>
+        <span class="date-heading" id="dateHeading"></span>
+      </div>
+    </div>
 
-  function genId(prefix) {
-    return (
-      (prefix || "id") +
-      "_" +
-      Date.now().toString(36) +
-      Math.random().toString(36).slice(2, 8)
-    );
-  }
+    <div class="sheet sheet-ruled" id="classList">
+      <!-- populated by register.js -->
+    </div>
 
-  // ---------- Routines ----------
+    <p class="muted" id="routineNote"></p>
+  </main>
+</div>
 
-  function getRoutines() {
-    return read(KEYS.routines, []);
-  }
+<div class="mobile-tabbar">
+  <a href="index.html" data-nav="register">Register</a>
+  <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+  <a href="subjects.html" data-nav="subjects">Subjects</a>
+  <a href="routine.html" data-nav="routine">Routine</a>
+  <a href="settings.html" data-nav="settings">Settings</a>
+</div>
 
-  function saveRoutines(routines) {
-    return write(KEYS.routines, routines);
-  }
-
-  function getRoutine(id) {
-    return getRoutines().find((r) => r.id === id) || null;
-  }
-
-  function upsertRoutine(routine) {
-    const routines = getRoutines();
-    const idx = routines.findIndex((r) => r.id === routine.id);
-    if (idx === -1) routines.push(routine);
-    else routines[idx] = routine;
-    saveRoutines(routines);
-    return routine;
-  }
-
-  function deleteRoutine(id) {
-    const routines = getRoutines().filter((r) => r.id !== id);
-    saveRoutines(routines);
-  }
-
-  function setActiveRoutine(id) {
-    const routines = getRoutines();
-    routines.forEach((r) => (r.active = r.id === id));
-    saveRoutines(routines);
-  }
-
-  // Find the routine that governs a given ISO date: prefer a routine
-  // whose [startDate, endDate] window contains the date; if several
-  // match, the one with the latest startDate wins; otherwise fall
-  // back to whichever routine is flagged active.
-  function getRoutineForDate(isoDate) {
-    const routines = getRoutines();
-    const inRange = routines.filter((r) => {
-      if (!r.startDate) return false;
-      if (r.startDate > isoDate) return false;
-      if (r.endDate && r.endDate < isoDate) return false;
-      return true;
-    });
-    if (inRange.length > 0) {
-      inRange.sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
-      return inRange[0];
-    }
-    return routines.find((r) => r.active) || null;
-  }
-
-  // ---------- Attendance ----------
-
-  function getAttendanceAll() {
-    return read(KEYS.attendance, {});
-  }
-
-  function saveAttendanceAll(data) {
-    return write(KEYS.attendance, data);
-  }
-
-  function getAttendanceForDate(isoDate) {
-    const all = getAttendanceAll();
-    return all[isoDate] || {};
-  }
-
-  function setAttendanceEntry(isoDate, classId, entry) {
-    const all = getAttendanceAll();
-    if (!all[isoDate]) all[isoDate] = {};
-    all[isoDate][classId] = entry;
-    saveAttendanceAll(all);
-  }
-
-  function clearAttendanceEntry(isoDate, classId) {
-    const all = getAttendanceAll();
-    if (all[isoDate] && all[isoDate][classId]) {
-      delete all[isoDate][classId];
-      if (Object.keys(all[isoDate]).length === 0) delete all[isoDate];
-      saveAttendanceAll(all);
-    }
-  }
-
-  // ---------- Settings ----------
-
-  function getSettings() {
-    return read(KEYS.settings, { target: 75, theme: "light", lastBackup: null });
-  }
-
-  function saveSettings(settings) {
-    return write(KEYS.settings, settings);
-  }
-
-  // ---------- Bulk / reset ----------
-
-  function exportAll() {
-    return {
-      exportedAt: new Date().toISOString(),
-      version: 1,
-      routines: getRoutines(),
-      attendance: getAttendanceAll(),
-      settings: getSettings(),
-    };
-  }
-
-  function importAll(payload) {
-    if (!payload || typeof payload !== "object") throw new Error("Invalid file");
-    if (Array.isArray(payload.routines)) saveRoutines(payload.routines);
-    if (payload.attendance && typeof payload.attendance === "object")
-      saveAttendanceAll(payload.attendance);
-    if (payload.settings && typeof payload.settings === "object")
-      saveSettings(payload.settings);
-  }
-
-  function deleteAttendanceData() {
-    write(KEYS.attendance, {});
-  }
-
-  function deleteRoutineData() {
-    write(KEYS.routines, []);
-  }
-
-  function deleteEverything() {
-    localStorage.removeItem(KEYS.routines);
-    localStorage.removeItem(KEYS.attendance);
-    localStorage.removeItem(KEYS.settings);
-  }
-
-  return {
-    KEYS,
-    genId,
-    getRoutines,
-    saveRoutines,
-    getRoutine,
-    upsertRoutine,
-    deleteRoutine,
-    setActiveRoutine,
-    getRoutineForDate,
-    getAttendanceAll,
-    saveAttendanceAll,
-    getAttendanceForDate,
-    setAttendanceEntry,
-    clearAttendanceEntry,
-    getSettings,
-    saveSettings,
-    exportAll,
-    importAll,
-    deleteAttendanceData,
-    deleteRoutineData,
-    deleteEverything,
-  };
-})();
+<script src="js/storage.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/app.js"></script>
+<script src="js/register.js"></script>
+</body>
+</html>
