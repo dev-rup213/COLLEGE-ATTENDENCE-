@@ -1,154 +1,131 @@
-/* ============================================================
-   utils.js — date helpers, attendance math, small shared helpers
-   ============================================================ */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Routine · College Attendance Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="routine">
 
-const Utils = (() => {
-  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const DAY_NAMES_FULL = [
-    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
-  ];
-  const MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
+<div class="mobile-topbar">
+  <span class="brand-mark">Routine</span>
+  <button class="btn btn-sm" data-theme-toggle>●</button>
+</div>
 
-  function todayISO() {
-    return toISO(new Date());
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Attendance</span>
+      <span class="brand-sub">register</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html" data-nav="register">Daily Register</a>
+      <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+      <a href="subjects.html" data-nav="subjects">Subjects</a>
+      <a href="routine.html" data-nav="routine">Routine</a>
+      <a href="settings.html" data-nav="settings">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" data-theme-toggle>● Dark mode</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-head">
+      <h1>Routines</h1>
+      <button class="btn btn-primary" id="newRoutineBtn">+ Create New Routine</button>
+    </div>
+    <p class="muted">Attendance uses whichever routine's date range covers the selected day. Replacing a routine never deletes past attendance.</p>
+
+    <div id="routineList"></div>
+  </main>
+</div>
+
+<div class="mobile-tabbar">
+  <a href="index.html" data-nav="register">Register</a>
+  <a href="dashboard.html" data-nav="dashboard">Dashboard</a>
+  <a href="subjects.html" data-nav="subjects">Subjects</a>
+  <a href="routine.html" data-nav="routine">Routine</a>
+  <a href="settings.html" data-nav="settings">Settings</a>
+</div>
+
+<!-- Editor modal -->
+<div class="modal-backdrop hidden" id="editorBackdrop">
+  <div class="modal">
+    <div class="flex-between">
+      <h2 id="editorTitle">New Routine</h2>
+      <button class="btn btn-sm btn-ghost" id="closeEditor">✕</button>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="rName">Routine name</label>
+        <input type="text" id="rName" placeholder="e.g. Semester 5">
+      </div>
+      <div class="field">
+        <label for="rStart">Start date</label>
+        <input type="date" id="rStart">
+      </div>
+      <div class="field">
+        <label for="rEnd">End date (optional)</label>
+        <input type="date" id="rEnd">
+      </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <div class="flex-between">
+      <h3>Option 1 — Upload Routine PDF</h3>
+    </div>
+    <div class="field-row" style="align-items:end;">
+      <div class="field" style="grid-column: span 2;">
+        <input type="file" id="pdfInput" accept="application/pdf">
+      </div>
+      <div class="field">
+        <button class="btn" id="extractBtn">Extract from PDF</button>
+      </div>
+    </div>
+    <p class="muted" id="pdfStatus"></p>
+
+    <hr class="section-divider">
+
+    <div class="flex-between">
+      <h3>Option 2 — Classes</h3>
+      <button class="btn btn-sm" id="addClassBtn">+ Add class</button>
+    </div>
+    <p class="muted">Extracted or typed classes appear below — check every row before saving.</p>
+
+    <div style="overflow-x:auto;">
+      <table class="data-table" id="classEditTable">
+        <thead><tr>
+          <th>Day</th><th>Start</th><th>End</th><th>Subject</th><th>Code</th><th>Room</th><th>Faculty</th><th></th>
+        </tr></thead>
+        <tbody id="classEditBody"></tbody>
+      </table>
+    </div>
+
+    <div class="flex-between" style="margin-top:1.1rem;">
+      <button class="btn btn-danger" id="deleteRoutineBtn">Delete routine</button>
+      <div style="display:flex; gap:0.5rem;">
+        <button class="btn" id="cancelEditor">Cancel</button>
+        <button class="btn btn-primary" id="saveRoutineBtn">Save routine</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
-
-  function toISO(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  function fromISO(iso) {
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-
-  function addDays(iso, n) {
-    const d = fromISO(iso);
-    d.setDate(d.getDate() + n);
-    return toISO(d);
-  }
-
-  function dayShort(iso) {
-    return DAY_NAMES[fromISO(iso).getDay()];
-  }
-
-  function dayFull(iso) {
-    return DAY_NAMES_FULL[fromISO(iso).getDay()];
-  }
-
-  function displayDate(iso) {
-    const d = fromISO(iso);
-    return `${DAY_NAMES_FULL[d.getDay()]} — ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-  }
-
-  function shortDisplayDate(iso) {
-    const d = fromISO(iso);
-    return `${String(d.getDate()).padStart(2, "0")} ${MONTH_NAMES[d.getMonth()].slice(0, 3)}`;
-  }
-
-  function monthKey(iso) {
-    return iso.slice(0, 7); // YYYY-MM
-  }
-
-  function monthLabel(key) {
-    const [y, m] = key.split("-").map(Number);
-    return `${MONTH_NAMES[m - 1]} ${y}`;
-  }
-
-  function isFuture(iso) {
-    return iso > todayISO();
-  }
-
-  function sortTime(a, b) {
-    return (a || "").localeCompare(b || "");
-  }
-
-  // ---------- Attendance math ----------
-
-  // counts = { present, absent, holiday }
-  function percentage(counts) {
-    const total = counts.present + counts.absent;
-    if (total === 0) return null;
-    return (counts.present / total) * 100;
-  }
-
-  function formatPct(pct) {
-    if (pct === null || pct === undefined || isNaN(pct)) return "—";
-    return pct.toFixed(1) + "%";
-  }
-
-  function pctTier(pct, target) {
-    if (pct === null) return "mid";
-    if (pct >= target) return "good";
-    if (pct >= target - 10) return "mid";
-    return "low";
-  }
-
-  // Classes still needed to reach target, given current present/absent
-  // (excluding holidays). Assumes each future class, if attended,
-  // adds 1 to both present and total.
-  function classesNeededForTarget(present, total, targetPct) {
-    const t = targetPct / 100;
-    if (t <= 0) return 0;
-    if (total === 0) return null; // no data yet
-    if (present / total >= t) return 0;
-    // solve smallest integer x >= 0 such that (present+x)/(total+x) >= t
-    const x = (t * total - present) / (1 - t);
-    return Math.max(0, Math.ceil(x - 1e-9));
-  }
-
-  // Classes that can still be missed (marked absent) while remaining
-  // at/above target, given current present/total.
-  function classesCanMissForTarget(present, total, targetPct) {
-    const t = targetPct / 100;
-    if (t <= 0) return null;
-    if (present / total < t) return 0;
-    // largest integer y >= 0 such that present/(total+y) >= t
-    const y = present / t - total;
-    return Math.max(0, Math.floor(y + 1e-9));
-  }
-
-  // ---------- Misc ----------
-
-  function debounce(fn, ms) {
-    let h;
-    return (...args) => {
-      clearTimeout(h);
-      h = setTimeout(() => fn(...args), ms);
-    };
-  }
-
-  function escapeHtml(str) {
-    return String(str ?? "").replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    }[c]));
-  }
-
-  function downloadFile(filename, content, mime) {
-    const blob = new Blob([content], { type: mime || "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  return {
-    DAY_NAMES, DAY_NAMES_FULL, MONTH_NAMES,
-    todayISO, toISO, fromISO, addDays,
-    dayShort, dayFull, displayDate, shortDisplayDate,
-    monthKey, monthLabel, isFuture, sortTime,
-    percentage, formatPct, pctTier,
-    classesNeededForTarget, classesCanMissForTarget,
-    debounce, escapeHtml, downloadFile,
-  };
-})();
+</script>
+<script src="js/storage.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/app.js"></script>
+<script src="js/pdf-parse.js"></script>
+<script src="js/routine.js"></script>
+</body>
+     </html>
