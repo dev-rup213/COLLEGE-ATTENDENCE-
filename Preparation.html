@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank PO & Clerk Syllabus Tracker</title>
+<style>
+  :root {
+    --bg: #f3f6fa;
+    --surface: #ffffff;
+    --ink: #14213d;
+    --muted: #5b6b85;
+    --line: #d9e1ec;
+    --accent: #0b7a6b;
+    --accent-soft: #dff3ef;
+    --tag-bg: #fdecc8;
+    --tag-ink: #7a4b00;
+    --track: #e3e9f1;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1522;
+      --surface: #16202f;
+      --ink: #e7edf6;
+      --muted: #9aa9c0;
+      --line: #2a384d;
+      --accent: #3fc4af;
+      --accent-soft: #15352f;
+      --tag-bg: #4a3710;
+      --tag-ink: #f5cf87;
+      --track: #243145;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px 14px 60px; }
+  header h1 { font-size: 1.45rem; margin: 0 0 2px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  .overall {
+    margin: 16px 0 22px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .overall-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .overall-top strong { font-size: 1.6rem; }
+  .overall-top span { color: var(--muted); font-size: 0.85rem; }
+  .bar { height: 8px; background: var(--track); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s ease; }
+
+  section { margin-bottom: 26px; }
+  .sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .sec-head h2 { font-size: 1.05rem; margin: 0; }
+  .sec-head small { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+
+  .scroll {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: center; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 0.78rem; font-weight: 600; color: var(--muted); background: var(--surface); }
+  th:first-child, td:first-child {
+    text-align: left;
+    position: sticky; left: 0;
+    background: var(--surface);
+    min-width: 190px;
+    padding-left: 12px;
+    z-index: 1;
+    box-shadow: 1px 0 0 var(--line);
+  }
+  td:first-child { font-size: 0.92rem; }
+  tr.done td { background: var(--accent-soft); }
+  tr.done td:first-child { background: var(--accent-soft); }
+  tr.done .topic { color: var(--muted); }
+
+  .tag {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 1px 7px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--tag-bg);
+    color: var(--tag-ink);
+    border-radius: 99px;
+  }
+
+  input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 26px; height: 26px;
+    margin: 0;
+    border: 2px solid var(--muted);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    vertical-align: middle;
+    display: inline-grid; place-content: center;
+  }
+  input[type=checkbox]::after {
+    content: "";
+    width: 12px; height: 7px;
+    border-left: 3px solid #fff;
+    border-bottom: 3px solid #fff;
+    transform: rotate(-45deg) scale(0);
+    margin-top: -3px;
+    transition: transform .12s ease;
+  }
+  input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  input[type=checkbox]:checked::after { transform: rotate(-45deg) scale(1); }
+  input[type=checkbox]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .hint { color: var(--muted); font-size: 0.82rem; max-width: 60ch; }
+  button {
+    font: inherit; font-size: 0.85rem;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button.danger { border-color: #c0392b; color: #c0392b; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #status { color: var(--muted); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bank PO & Clerk Syllabus Tracker</h1>
+    <p>IBPS, SBI & RRB — Prelims + Mains</p>
+  </header>
+
+  <div class="overall">
+    <div class="overall-top"><strong id="overallPct">0%</strong><span id="overallCount">0 of 0 ticked</span></div>
+    <div class="bar"><i id="overallBar"></i></div>
+  </div>
+
+  <main id="app"></main>
+
+  <div class="foot">
+    <p class="hint">Concepts: tick after theory/videos. Practice: tick after 50+ questions on the topic. Revision 1 and 2: use before Prelims and Mains mocks.</p>
+    <div>
+      <button id="resetBtn" class="danger" type="button">Reset all ticks</button>
+      <div id="status"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEY = "bank-po-clerk-checklist-v1";
+
+const SECTIONS = [
+  { title: "1. Quantitative Aptitude / Numerical Ability", first: "Concepts", topics: [
+    ["Simplification & Approximation"],
+    ["Number Series (Missing & Wrong)"],
+    ["Quadratic Equations (Inequalities)"],
+    ["Percentage & Ratio-Proportion"],
+    ["Average & Ages"],
+    ["Profit, Loss & Discount"],
+    ["Simple & Compound Interest"],
+    ["Partnership & Mixture-Alligation"],
+    ["Time & Work, Pipes & Cisterns"],
+    ["Time, Speed, Distance, Boats & Trains"],
+    ["Permutation, Combination & Probability"],
+    ["Mensuration (2D & 3D)"],
+    ["Standard Data Interpretation (Bar, Line, Pie, Table)"],
+    ["Advanced DI (Caselet, Missing, Radar)", "PO Mains Focus"],
+    ["Data Sufficiency & Quantity Comparison", "PO Mains Focus"]
+  ]},
+  { title: "2. Reasoning Ability", first: "Concepts", topics: [
+    ["Inequality (Direct & Coded)"],
+    ["Syllogism (Only, Only a few, Reverse)"],
+    ["Coding-Decoding (Letter, Number, Chinese, New Pattern)"],
+    ["Alphanumeric & Word/Number Series"],
+    ["Blood Relations & Direction Sense"],
+    ["Order & Ranking"],
+    ["Seating Arrangement (Linear, Circular, Square, Uncertain)"],
+    ["Puzzles (Floor, Flat, Box, Day, Month, Year, Scheduling)"],
+    ["Machine Input-Output"],
+    ["Data Sufficiency"],
+    ["Logical / Critical Reasoning (Assumptions, Conclusions, Course of Action, Cause & Effect)", "PO Mains Focus"]
+  ]},
+  { title: "3. English Language", first: "Concepts", topics: [
+    ["Reading Comprehension (Story & Editorial-Based)"],
+    ["Cloze Test (Single & Double Fillers)"],
+    ["Error Spotting & Sentence Improvement"],
+    ["Para Jumbles & Sentence Rearrangement"],
+    ["Fill in the Blanks & Word Swap / Word Usage"],
+    ["Match the Column & Sentence Connectors"],
+    ["Vocabulary (Synonyms, Antonyms, Idioms & Phrasal Verbs)"],
+    ["Descriptive Writing: Essay & Letter Writing", "PO Only"]
+  ]},
+  { title: "4. General, Financial & Banking Awareness (Mains)", first: "Notes", topics: [
+    ["Current Affairs (Last 6 Months — National, International, Appointments, Awards, Sports, MOUs)"],
+    ["Banking Awareness (RBI Structure, Monetary Policy, Digital Banking, NPAs, Basel Norms, Negotiable Instruments)"],
+    ["Financial Markets & Institutions (SEBI, NABARD, SIDBI, Money & Capital Markets)"],
+    ["Union Budget, Economic Survey & Government Schemes"],
+    ["Static GK (Bank Headquarters & Taglines, National Parks, Dams, Currencies & Capitals)"]
+  ]}
+];
+const COLS = 4;
+
+let state = {};
+let armed = false;
+
+async function load() {
+  try {
+    if (window.storage) {
+      const r = await window.storage.get(KEY, false);
+      if (r && r.value) return JSON.parse(r.value);
+    }
+  } catch (e) {}
+  try {
+    const v = localStorage.getItem(KEY);
+    if (v) return JSON.parse(v);
+  } catch (e) {}
+  return {};
+}
+
+async function save() {
+  const data = JSON.stringify(state);
+  let ok = false;
+  try {
+    if (window.storage) {
+      const r = await window.storage.set(KEY, data, false);
+      ok = !!r;
+    }
+  } catch (e) {}
+  try { localStorage.setItem(KEY, data); ok = true; } catch (e) {}
+  document.getElementById("status").textContent = ok ? "" : "Progress can't be saved in this view.";
+}
+
+const id = (s, r, c) => `${s}-${r}-${c}`;
+
+function render() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  SECTIONS.forEach((sec, s) => {
+    const el = document.createElement("section");
+    const heads = [sec.first, "Practice", "Revision 1", "Revision 2"];
+    let rows = "";
+    sec.topics.forEach(([name, tag], r) => {
+      let cells = "";
+      for (let c = 0; c < COLS; c++) {
+        const k = id(s, r, c);
+        cells += `<td><input type="checkbox" data-k="${k}" ${state[k] ? "checked" : ""} aria-label="${heads[c]}: ${name.replace(/"/g, "'")}"></td>`;
+      }
+      rows += `<tr data-row="${s}-${r}"><td><span class="topic">${name}</span>${tag ? `<br><span class="tag">${tag}</span>` : ""}</td>${cells}</tr>`;
+    });
+    el.innerHTML = `
+      <div class="sec-head"><h2>${sec.title}</h2><small id="sc${s}"></small></div>
+      <div class="bar" style="margin:0 0 8px"><i id="sb${s}"></i></div>
+      <div class="scroll"><table>
+        <thead><tr><th>Topic / Chapter</th>${heads.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+    app.appendChild(el);
+  });
+  updateAll();
+}
+
+function updateAll() {
+  let totalDone = 0, total = 0;
+  SECTIONS.forEach((sec, s) => {
+    let done = 0;
+    sec.topics.forEach((t, r) => {
+      let rowAll = true;
+      for (let c = 0; c < COLS; c++) {
+        if (state[id(s, r, c)]) done++; else rowAll = false;
+      }
+      const tr = document.querySelector(`tr[data-row="${s}-${r}"]`);
+      if (tr) tr.classList.toggle("done", rowAll);
+    });
+    const n = sec.topics.length * COLS;
+    totalDone += done; total += n;
+    document.getElementById("sc" + s).textContent = `${done}/${n} · ${Math.round(done / n * 100)}%`;
+    document.getElementById("sb" + s).style.width = (done / n * 100) + "%";
+  });
+  const pct = Math.round(totalDone / total * 100);
+  document.getElementById("overallPct").textContent = pct + "%";
+  document.getElementById("overallCount").textContent = `${totalDone} of ${total} ticked`;
+  document.getElementById("overallBar").style.width = pct + "%";
+}
+
+document.addEventListener("change", e => {
+  const k = e.target.dataset && e.target.dataset.k;
+  if (!k) return;
+  if (e.target.checked) state[k] = true; else delete state[k];
+  updateAll();
+  save();
+});
+
+document.getElementById("resetBtn").addEventListener("click", e => {
+  const b = e.target;
+  if (!armed) {
+    armed = true;
+    b.textContent = "Tap again to clear everything";
+    setTimeout(() => { armed = false; b.textContent = "Reset all ticks"; }, 4000);
+    return;
+  }
+  armed = false;
+  b.textContent = "Reset all ticks";
+  state = {};
+  render();
+  save();
+});
+
+(async () => {
+  state = await load();
+  render();
+})();
+</script>
+</body>
+</html>
